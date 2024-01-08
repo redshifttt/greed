@@ -8,20 +8,25 @@ import (
 	"os"
 	"strings"
 	"strconv"
+	"log"
 
 	"github.com/mmcdole/gofeed"
     // "github.com/k3a/html2text"
 )
 
 func feedListView(retrievedFeeds []gofeed.Feed) {
+    fmt.Printf("Feeds view, %d feeds\n", len(retrievedFeeds))
+
     for n, feed := range retrievedFeeds {
         fmt.Printf("%d (%d) %s -- %s\n", n, len(feed.Items), feed.Title, feed.Description)
     }
 }
 
-func articleListView(selectedFeed []*gofeed.Item) {
-    for n, article := range selectedFeed {
-        fmt.Printf("%d %s\n", n, article.Title)
+func articleListView(selectedFeed gofeed.Feed) {
+    fmt.Printf("Article view for feed %s\n", selectedFeed.Title)
+
+    for n, article := range selectedFeed.Items {
+        fmt.Printf("%d %s %s\n", n, article.Published, article.Title)
     }
 }
 
@@ -55,12 +60,16 @@ func getFeedsData(urlsFile string) []gofeed.Feed {
         body, err := io.ReadAll(resp.Body)
         body_text := string(body)
 
+        fmt.Printf("[%d/%d] parsing data for feed %s ... ", n + 1, totalUrls, url)
+
         fp := gofeed.NewParser()
         feed, err := fp.ParseString(body_text)
         if err != nil {
             panic(err)
         }
         retrievedFeeds = append(retrievedFeeds, *feed)
+
+        fmt.Printf("done!\n")
     }
 
     return retrievedFeeds
@@ -70,7 +79,8 @@ func main() {
     retrievedFeeds := getFeedsData("input.txt")
 
     context := "feeds"
-    lastItem := 0
+    lastFeedIndex := 0
+    var selectedFeed gofeed.Feed
 
     // Default action
     feedListView(retrievedFeeds)
@@ -78,12 +88,13 @@ func main() {
     for {
         reader := bufio.NewReader(os.Stdin)
 
-        fmt.Printf("greed (ctx: %s): ", context)
+        fmt.Printf("[greed view: %s] ", context)
         text, _ := reader.ReadString('\n')
         text = text[:len(text) - 1] // Get rid of the "\n"
 
         command, commandArgs, hasArgs := strings.Cut(text, " ")
 
+        // TODO: divide this up into functions.
         switch context {
         case "feeds":
             switch command {
@@ -91,28 +102,29 @@ func main() {
                 feedListView(retrievedFeeds)
             case "open":
                 if hasArgs {
-                    // God I love how Go forces you to think about errors.
-                    // Means this can basically be type-checked.
                     newCommandArgs, err := strconv.Atoi(commandArgs)
                     if err != nil {
-                        fmt.Println("error: argument should be int")
-                        panic(err)
+                        log.Fatalf("error: '%s' should be of type int.\n", err)
                     }
-                    articleListView(retrievedFeeds[newCommandArgs].Items)
+                    selectedFeed = retrievedFeeds[newCommandArgs]
+
+                    articleListView(selectedFeed)
                     context = "articles"
-                    lastItem = newCommandArgs
+                    lastFeedIndex = newCommandArgs
                 }
+            default:
+                fmt.Printf("error: '%s' is not a valid command in the feeds context.\n", command)
             }
         case "articles":
             switch text {
             case "ls":
-                // To get to this point we would have had to selected a feed so
-                // we can deterministically use lastItem, knowing that it would
-                // have been set for a feed, for printing the current feed aka
-                // the one we're in. This is totally fool proof right? No idea!
-                // Maybe for sanity-sake we should have a variable for feed and
-                // article. Could get confusing otherwise.
-                articleListView(retrievedFeeds[lastItem].Items)
+                selectedFeed = retrievedFeeds[lastFeedIndex]
+                articleListView(selectedFeed)
+            case "back":
+                feedListView(retrievedFeeds)
+                context = "feeds"
+            default:
+                fmt.Printf("error: '%s' is not a valid command in the articles context.\n", command)
             }
         }
     }
