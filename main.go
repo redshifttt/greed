@@ -34,7 +34,7 @@ func getFeedsData(urlsFile string) []gofeed.Feed {
     data, err := os.ReadFile(urlsFile)
 
     if err != nil {
-        panic(err)
+        log.Fatalf("error: cannot read urls file: %s\n", err)
     }
 
     urls := strings.Split(string(data), "\n")
@@ -51,11 +51,12 @@ func getFeedsData(urlsFile string) []gofeed.Feed {
 
         resp, err := http.Get(url)
         if err != nil {
-            panic(err)
+            // TODO: Maybe don't have this fatally error. Instead could print error, continue.
+            log.Fatalf("error: http GET request for %s: %s\n", url, err)
         }
         defer resp.Body.Close()
 
-        fmt.Printf("%s\n", resp.Status)
+        fmt.Printf("%s.\n", resp.Status)
 
         body, err := io.ReadAll(resp.Body)
         body_text := string(body)
@@ -65,7 +66,7 @@ func getFeedsData(urlsFile string) []gofeed.Feed {
         fp := gofeed.NewParser()
         feed, err := fp.ParseString(body_text)
         if err != nil {
-            panic(err)
+            log.Fatalf("error: cannot parse feed %s: %s\n", url, err)
         }
         retrievedFeeds = append(retrievedFeeds, *feed)
 
